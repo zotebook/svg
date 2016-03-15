@@ -18,24 +18,27 @@ type Path struct {
 	group       *Group
 }
 
+// Segment
+// A segment of a path that contains a list of connected points, its stroke Width and if the segment forms a closed loop.
+// Points are defined in world space after any matrix transformation is applied.
 type Segment struct {
 	Width  float64
 	Closed bool
 	Points [][2]float64
 }
 
-func (p Path) NewSegment(start [2]float64) *Segment {
+func (p Path) newSegment(start [2]float64) *Segment {
 	var s Segment
 	s.Width = p.strokeWidth * p.group.Owner.scale
 	s.Points = append(s.Points, start)
 	return &s
 }
 
-func (s *Segment) AddPoint(p [2]float64) {
+func (s *Segment) addPoint(p [2]float64) {
 	s.Points = append(s.Points, p)
 }
 
-type PathDParser struct {
+type pathDescriptionParser struct {
 	p              *Path
 	lex            gl.Lexer
 	x, y           float64
@@ -48,18 +51,20 @@ type PathDParser struct {
 	currentsegment *Segment
 }
 
-func NewPathDParse() *PathDParser {
-	pdp := &PathDParser{}
+func newPathDParse() *pathDescriptionParser {
+	pdp := &pathDescriptionParser{}
 	pdp.transform = mt.Identity()
 	return pdp
 }
 
+// Parse()
+// interprets path description, transform and style atttributes to create a channel of segments.
 func (p *Path) Parse() chan Segment {
 	fmt.Println("p.group", p.group)
 
 	fmt.Println("p.group.Owner", p.group.Owner)
 	p.parseStyle()
-	pdp := NewPathDParse()
+	pdp := newPathDParse()
 	pdp.p = p
 	pdp.svg = p.group.Owner
 	pdp.transform.MultiplyWith(*p.group.Transform)
@@ -87,7 +92,7 @@ func (p *Path) Parse() chan Segment {
 	return p.Segments
 }
 
-func parseCommand(pdp *PathDParser, l *gl.Lexer, i gl.Item) error {
+func parseCommand(pdp *pathDescriptionParser, l *gl.Lexer, i gl.Item) error {
 	var err error
 	switch i.Value {
 	case "M":
@@ -115,7 +120,7 @@ func parseCommand(pdp *PathDParser, l *gl.Lexer, i gl.Item) error {
 
 }
 
-func parseMoveToAbs(pdp *PathDParser) error {
+func parseMoveToAbs(pdp *pathDescriptionParser) error {
 	t, err := parseTuple(&pdp.lex)
 	if err != nil {
 		return fmt.Errorf("Error Passing MoveToAbs Expected Tuple\n%s", err)
@@ -144,19 +149,19 @@ func parseMoveToAbs(pdp *PathDParser) error {
 		fmt.Println(pdp.svg)
 		s.Width = pdp.p.strokeWidth * pdp.p.group.Owner.scale
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		s.AddPoint([2]float64{x, y})
+		s.addPoint([2]float64{x, y})
 		pdp.currentsegment = &s
 
 	}
 
 	if len(tuples) > 0 {
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		s := pdp.p.NewSegment([2]float64{x, y})
+		s := pdp.p.newSegment([2]float64{x, y})
 		for _, nt := range tuples {
 			pdp.x = nt[0]
 			pdp.y = nt[1]
 			x, y = pdp.transform.Apply(pdp.x, pdp.y)
-			s.AddPoint([2]float64{x, y})
+			s.addPoint([2]float64{x, y})
 		}
 		pdp.currentsegment = s
 	}
@@ -164,7 +169,7 @@ func parseMoveToAbs(pdp *PathDParser) error {
 
 }
 
-func parseLineToAbs(pdp *PathDParser) error {
+func parseLineToAbs(pdp *pathDescriptionParser) error {
 	var tuples []Tuple
 	pdp.lex.ConsumeWhiteSpace()
 	for pdp.lex.PeekItem().Type == gl.ItemNumber {
@@ -177,12 +182,12 @@ func parseLineToAbs(pdp *PathDParser) error {
 	}
 	if len(tuples) > 0 {
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		pdp.currentsegment.AddPoint([2]float64{x, y})
+		pdp.currentsegment.addPoint([2]float64{x, y})
 		for _, nt := range tuples {
 			pdp.x = nt[0]
 			pdp.y = nt[1]
 			x, y = pdp.transform.Apply(pdp.x, pdp.y)
-			pdp.currentsegment.AddPoint([2]float64{x, y})
+			pdp.currentsegment.addPoint([2]float64{x, y})
 		}
 	}
 
@@ -190,7 +195,7 @@ func parseLineToAbs(pdp *PathDParser) error {
 
 }
 
-func parseMoveToRel(pdp *PathDParser) error {
+func parseMoveToRel(pdp *pathDescriptionParser) error {
 	//	fmt.Println("parsemovetorel")
 	pdp.lex.ConsumeWhiteSpace()
 	t, err := parseTuple(&pdp.lex)
@@ -218,24 +223,24 @@ func parseMoveToRel(pdp *PathDParser) error {
 		var s Segment
 		s.Width = pdp.p.strokeWidth * pdp.svg.scale
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		s.AddPoint([2]float64{x, y})
+		s.addPoint([2]float64{x, y})
 		pdp.currentsegment = &s
 	}
 	if len(tuples) > 0 {
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		pdp.currentsegment.AddPoint([2]float64{x, y})
+		pdp.currentsegment.addPoint([2]float64{x, y})
 		for _, nt := range tuples {
 			pdp.x += nt[0]
 			pdp.y += nt[1]
 			x, y = pdp.transform.Apply(pdp.x, pdp.y)
-			pdp.currentsegment.AddPoint([2]float64{x, y})
+			pdp.currentsegment.addPoint([2]float64{x, y})
 		}
 	}
 
 	return nil
 }
 
-func parseLineToRel(pdp *PathDParser) error {
+func parseLineToRel(pdp *pathDescriptionParser) error {
 
 	var tuples []Tuple
 	pdp.lex.ConsumeWhiteSpace()
@@ -249,19 +254,19 @@ func parseLineToRel(pdp *PathDParser) error {
 	}
 	if len(tuples) > 0 {
 		x, y := pdp.transform.Apply(pdp.x, pdp.y)
-		pdp.currentsegment.AddPoint([2]float64{x, y})
+		pdp.currentsegment.addPoint([2]float64{x, y})
 		for _, nt := range tuples {
 			pdp.x += nt[0]
 			pdp.y += nt[1]
 			x, y = pdp.transform.Apply(pdp.x, pdp.y)
-			pdp.currentsegment.AddPoint([2]float64{x, y})
+			pdp.currentsegment.addPoint([2]float64{x, y})
 		}
 	}
 
 	return nil
 }
 
-func parseHLineToAbs(pdp *PathDParser) error {
+func parseHLineToAbs(pdp *pathDescriptionParser) error {
 	pdp.lex.ConsumeWhiteSpace()
 	var n float64
 	var err error
@@ -273,15 +278,15 @@ func parseHLineToAbs(pdp *PathDParser) error {
 	}
 
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 	pdp.x = n
 	x, y = pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	return nil
 }
 
-func parseHLineToRel(pdp *PathDParser) error {
+func parseHLineToRel(pdp *pathDescriptionParser) error {
 	pdp.lex.ConsumeWhiteSpace()
 	var n float64
 	var err error
@@ -293,16 +298,16 @@ func parseHLineToRel(pdp *PathDParser) error {
 	}
 
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 	pdp.x += n
 	x, y = pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	return nil
 
 }
 
-func parseVLineToAbs(pdp *PathDParser) error {
+func parseVLineToAbs(pdp *pathDescriptionParser) error {
 	pdp.lex.ConsumeWhiteSpace()
 	var n float64
 	var err error
@@ -314,18 +319,18 @@ func parseVLineToAbs(pdp *PathDParser) error {
 	}
 
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 	pdp.y = n
 	x, y = pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	return nil
 }
 
-func parseClose(pdp *PathDParser) error {
+func parseClose(pdp *pathDescriptionParser) error {
 	pdp.lex.ConsumeWhiteSpace()
 	if pdp.currentsegment != nil {
-		pdp.currentsegment.AddPoint(pdp.currentsegment.Points[0])
+		pdp.currentsegment.addPoint(pdp.currentsegment.Points[0])
 		pdp.currentsegment.Closed = true
 		pdp.p.Segments <- *pdp.currentsegment
 		pdp.currentsegment = nil
@@ -335,7 +340,7 @@ func parseClose(pdp *PathDParser) error {
 
 }
 
-func parseVLineToRel(pdp *PathDParser) error {
+func parseVLineToRel(pdp *pathDescriptionParser) error {
 	pdp.lex.ConsumeWhiteSpace()
 	var n float64
 	var err error
@@ -347,16 +352,16 @@ func parseVLineToRel(pdp *PathDParser) error {
 	}
 
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 	pdp.y += n
 	x, y = pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	return nil
 
 }
 
-func parseCurveToRel(pdp *PathDParser) error {
+func parseCurveToRel(pdp *pathDescriptionParser) error {
 	var tuples []Tuple
 	pdp.lex.ConsumeWhiteSpace()
 	for pdp.lex.PeekItem().Type == gl.ItemNumber {
@@ -368,10 +373,10 @@ func parseCurveToRel(pdp *PathDParser) error {
 		pdp.lex.ConsumeWhiteSpace()
 	}
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	for j := 0; j < len(tuples)/3; j++ {
-		var cb CubicBezier
+		var cb cubicBezier
 		cb.controlpoints[0][0] = pdp.x
 		cb.controlpoints[0][1] = pdp.y
 
@@ -387,17 +392,17 @@ func parseCurveToRel(pdp *PathDParser) error {
 		cb.controlpoints[3][0] = pdp.x
 		cb.controlpoints[3][1] = pdp.y
 
-		vertices := cb.RecursiveInterpolate(10, 0)
+		vertices := cb.recursiveInterpolate(10, 0)
 		for _, v := range vertices {
 			x, y = pdp.transform.Apply(v[0], v[1])
-			pdp.currentsegment.AddPoint([2]float64{x, y})
+			pdp.currentsegment.addPoint([2]float64{x, y})
 		}
 	}
 
 	return nil
 }
 
-func parseCurveToAbs(pdp *PathDParser) error {
+func parseCurveToAbs(pdp *pathDescriptionParser) error {
 	var tuples []Tuple
 	pdp.lex.ConsumeWhiteSpace()
 	for pdp.lex.PeekItem().Type == gl.ItemNumber {
@@ -410,10 +415,10 @@ func parseCurveToAbs(pdp *PathDParser) error {
 	}
 
 	x, y := pdp.transform.Apply(pdp.x, pdp.y)
-	pdp.currentsegment.AddPoint([2]float64{x, y})
+	pdp.currentsegment.addPoint([2]float64{x, y})
 
 	for j := 0; j < len(tuples)/3; j++ {
-		var cb CubicBezier
+		var cb cubicBezier
 		cb.controlpoints[0][0] = pdp.x
 		cb.controlpoints[0][1] = pdp.y
 		for i, nt := range tuples[j*3 : (j+1)*3] {
@@ -422,10 +427,10 @@ func parseCurveToAbs(pdp *PathDParser) error {
 			cb.controlpoints[i+1][0] = pdp.x
 			cb.controlpoints[i+1][1] = pdp.y
 		}
-		vertices := cb.RecursiveInterpolate(10, 0)
+		vertices := cb.recursiveInterpolate(10, 0)
 		for _, v := range vertices {
 			x, y = pdp.transform.Apply(v[0], v[1])
-			pdp.currentsegment.AddPoint([2]float64{x, y})
+			pdp.currentsegment.addPoint([2]float64{x, y})
 		}
 	}
 

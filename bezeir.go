@@ -2,13 +2,15 @@ package svg
 
 import "math"
 
-type CubicBezier struct {
+// cubicBezier
+//
+type cubicBezier struct {
 	controlpoints [4][2]float64
 	vertices      [][2]float64
 	level         int
 }
 
-func (c *CubicBezier) Interpolate(n int) [][2]float64 {
+func (c *cubicBezier) interpolate(n int) [][2]float64 {
 	var vertices [][2]float64
 	for i := 0; i < n+1; i++ {
 		var t float64
@@ -22,7 +24,7 @@ func (c *CubicBezier) Interpolate(n int) [][2]float64 {
 	return vertices
 }
 
-func (c *CubicBezier) RecursiveInterpolate(limit int, level int) [][2]float64 {
+func (c *cubicBezier) recursiveInterpolate(limit int, level int) [][2]float64 {
 	c.level = level
 	//	fmt.Println(level)
 	var m12 [2]float64
@@ -79,20 +81,20 @@ func (c *CubicBezier) RecursiveInterpolate(limit int, level int) [][2]float64 {
 
 	if d1+d2 > 5.0*math.Pi/180.0 {
 		var vertices [][2]float64
-		var c1 CubicBezier
+		var c1 cubicBezier
 		c1.controlpoints[0] = c.controlpoints[0]
 		c1.controlpoints[1] = m12
 		c1.controlpoints[2] = m123
 		c1.controlpoints[3] = m1234
 
-		vertices = append(vertices, c1.RecursiveInterpolate(limit-1, c.level+1)...)
+		vertices = append(vertices, c1.recursiveInterpolate(limit-1, c.level+1)...)
 
-		var c2 CubicBezier
+		var c2 cubicBezier
 		c2.controlpoints[0] = m1234
 		c2.controlpoints[1] = m234
 		c2.controlpoints[2] = m34
 		c2.controlpoints[3] = c.controlpoints[3]
-		vertices = append(vertices, c2.RecursiveInterpolate(limit-1, c.level+1)...)
+		vertices = append(vertices, c2.recursiveInterpolate(limit-1, c.level+1)...)
 		return vertices
 	} else {
 		var vertices [][2]float64

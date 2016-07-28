@@ -3,7 +3,6 @@ package svg
 import (
 	"encoding/xml"
 	"fmt"
-	"strconv"
 
 	mt "github.com/rustyoz/Mtransform"
 )
@@ -21,7 +20,7 @@ type Svg struct {
 type Group struct {
 	Id              string
 	Stroke          string
-	StrokeWidth     int32
+	StrokeWidth     string // e.g. "120%" or "0.1pt"
 	Fill            string
 	FillRule        string
 	Elements        []interface{}
@@ -33,6 +32,7 @@ type Group struct {
 
 // Implements encoding.xml.Unmarshaler interface
 func (g *Group) UnmarshalXML(decoder *xml.Decoder, start xml.StartElement) error {
+	fmt.Printf("Decoding start element %v\n", start)
 	for _, attr := range start.Attr {
 		switch attr.Name.Local {
 		case "id":
@@ -40,11 +40,7 @@ func (g *Group) UnmarshalXML(decoder *xml.Decoder, start xml.StartElement) error
 		case "stroke":
 			g.Stroke = attr.Value
 		case "stroke-width":
-			if intValue, err := strconv.ParseInt(attr.Value, 10, 32); err != nil {
-				return err
-			} else {
-				g.StrokeWidth = int32(intValue)
-			}
+			g.StrokeWidth = attr.Value
 		case "fill":
 			g.Fill = attr.Value
 		case "fill-rule":
@@ -70,19 +66,34 @@ func (g *Group) UnmarshalXML(decoder *xml.Decoder, start xml.StartElement) error
 			var elementStruct interface{}
 
 			switch tok.Name.Local {
+			// TODO: text, use
 			case "g":
 				elementStruct = &Group{Parent: g, Owner: g.Owner, Transform: mt.NewTransform()}
 			case "rect":
 				elementStruct = &Rect{group: g}
 			case "path":
-				elementStruct = &Path{group: g, strokeWidth: 1}
-
+				elementStruct = &Path{group: g}
+			case "polygon":
+				elementStruct = &Polygon{group: g}
+			case "polyline":
+				elementStruct = &PolyLine{group: g}
+			case "ellipse":
+				elementStruct = &Ellipse{group: g}
+			case "circle":
+				elementStruct = &Circle{group: g}
+			case "line":
+				elementStruct = &Line{group: g}
+			case "image":
+				elementStruct = &Image{group: g}
 			}
 
-			if err = decoder.DecodeElement(elementStruct, &tok); err != nil {
-				return fmt.Errorf("Error decoding element of Group\n%s", err)
-			} else {
-				g.Elements = append(g.Elements, elementStruct)
+			if elementStruct != nil {
+				if err = decoder.DecodeElement(elementStruct, &tok); err != nil {
+					return fmt.Errorf("Error decoding element of Group with token '%s' \n%s", tok.Name.Local, err)
+				} else {
+					g.Elements = append(g.Elements, elementStruct)
+					fmt.Printf("Decoded element '%s':%v\n", tok.Name.Local, elementStruct)
+				}
 			}
 
 		case xml.EndElement:
